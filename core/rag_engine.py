@@ -98,13 +98,23 @@ Hôm nay là ngày: {today_date} (Dùng để quy đổi từ "hôm nay", "ngày
 
 Khách hàng nói: {message}"""
 
-        try:
-            response = chat.send_message(enriched_message)
-            reply_text = response.text
-        except Exception as e:
-            error_msg = str(e)
+        reply_text = ""
+        for attempt in range(3):
+            try:
+                response = chat.send_message(enriched_message)
+                reply_text = response.text
+                break
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[Gemini API Error attempt {attempt+1}] {error_msg}")
+                if "429" in error_msg or "ResourceExhausted" in error_msg or "quota" in error_msg.lower():
+                    import time
+                    time.sleep(12 * (attempt + 1))
+                else:
+                    break
+        
+        if not reply_text:
             reply_text = "Dạ, hệ thống AI đang gặp chút gián đoạn kết nối. Quý khách vui lòng thử lại sau giây lát ạ!"
-            print(f"[Gemini API Error] {error_msg}")
 
         # State sau khi xử lý (bị modify bởi các tools gọi ở trên)
         new_state = state_manager.get_state(session_id)
