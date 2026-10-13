@@ -1,0 +1,25 @@
+# Python virtualenv & cache
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables & secrets
+.env
+
+# Vector Database local data
+chroma_data/
+./chroma_data/
+chroma_db/
+./chroma_db/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test scratch / logs
+*.log
+scratch/
