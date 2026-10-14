@@ -38,29 +38,38 @@ def check_availability(branch_id: int, check_in: str, check_out: str, adults: in
             cur.close()
             conn.close()
             
-            branch_rooms = [{
-                "roomType": p[0],
-                "roomTypeName": f"Phòng {p[0]}",
-                "pricePerNight": float(p[1]) if p[1] else 0,
-                "standardCapacity": p[2]
-            } for p in policies]
+            branch_rooms = []
+            for p in policies:
+                cap = max(1, p[2])
+                needed_qty = max(1, (adults + cap - 1) // cap)
+                branch_rooms.append({
+                    "roomType": p[0],
+                    "roomTypeName": f"Phòng {p[0]} (Đặt {needed_qty} phòng cho {adults} người)",
+                    "pricePerNight": float(p[1]) if p[1] else 0,
+                    "standardCapacity": p[2],
+                    "suggestedRooms": needed_qty,
+                    "totalPricePerNight": float(p[1] or 0) * needed_qty,
+                    "availableQty": 5
+                })
             
             _update_state({
-                "branch": {"id": branch_id},
+                "branch": {"id": branch_id, "name": hname[0] if hname else "Chi nhánh Sen Việt"},
                 "checkIn": check_in,
                 "checkOut": check_out,
                 "guests": {"adults": adults, "children": children},
-                "currentStep": "SELECT_ROOM"
+                "currentStep": "SELECT_ROOM",
+                "availableRooms": branch_rooms
             })
             
             return json.dumps({
-                "status": "exceeds_capacity",
-                "message": f"Số lượng khách ({adults} người) vượt quá sức chứa tối đa của 1 phòng đơn (hạng phòng lớn nhất tại Sen Việt là FAMILY chứa tối đa 4 người).",
+                "status": "success",
+                "is_multi_room": True,
+                "message": f"Số lượng khách ({adults} người) vượt quá sức chứa tối đa của 1 phòng đơn (hạng FAMILY chứa tối đa 4 người). Hệ thống Sen Việt hỗ trợ đặt nhiều phòng (2, 3, 4 phòng) trực tiếp trên chat.",
                 "max_single_room_capacity": 4,
                 "requested_adults": adults,
                 "branch_name": hname[0] if hname else "",
                 "available_room_types": branch_rooms,
-                "guidance": f"Hãy giải thích lịch sự rằng một phòng đơn tại Sen Việt chỉ chứa tối đa 4 người (hạng Family). Chủ động đề xuất các phương án chia đoàn {adults} người thành nhiều phòng (ví dụ: {(adults + 3) // 4} phòng Family, hoặc kết hợp 1 Family + các phòng Deluxe/Standard), và cung cấp hotline 1900 6868 để lễ tân hỗ trợ sắp xếp phòng liền kề."
+                "guidance": f"Hãy giải thích rằng 1 phòng đơn tối đa 4 người (hạng Family). Đề xuất ngay các phương án chia phòng để khách đặt TRỰC TIẾP TRÊN CHAT: Phương án 1: Đặt {max(1, (adults+3)//4)} phòng Family (mỗi phòng 4 người); Phương án 2: Đặt {max(1, (adults+1)//2)} phòng Deluxe hoặc Standard (mỗi phòng 2 người). Khi khách đồng ý phương án nào, hãy gọi tool select_room_and_services với đúng room_qty (ví dụ 2 phòng Family) để chốt đơn ngay trên chat. KHÔNG bắt khách gọi hotline để đặt phòng thứ 2."
             }, ensure_ascii=False)
 
         cur.execute("SELECT room_type, base_price, standard_capacity FROM branch_room_policies WHERE hotel_id = %s AND standard_capacity >= %s", (branch_id, adults))
@@ -127,13 +136,19 @@ def update_guest_info(name: str, phone: str, email: str) -> str:
 
 def select_room_and_services(room_type_id: str, room_qty: int, service_ids: list) -> str:
     """Khách hàng chốt loại phòng và số lượng phòng cùng các dịch vụ đi kèm."""
+    qty = int(room_qty) if room_qty else 1
     _update_state({
         "roomType": {"id": room_type_id},
-        "roomQty": room_qty,
+        "roomQty": max(1, qty),
         "services": [{"id": sid, "quantity": 1} for sid in service_ids],
         "currentStep": "GET_GUEST_INFO"
     })
-    return json.dumps({"status": "success", "message": "Đã ghi nhận phòng và dịch vụ. Chuyển sang xin thông tin khách hàng."})
+    return json.dumps({
+        "status": "success",
+        "room_type": room_type_id,
+        "room_qty": max(1, qty),
+        "message": f"Đã ghi nhận đặt {max(1, qty)} phòng {room_type_id} và dịch vụ. Chuyển sang xin thông tin khách hàng."
+    }, ensure_ascii=False)
 
 def list_valid_promotions() -> str:
     """Lấy danh sách các mã khuyến mãi khả dụng."""
