@@ -373,7 +373,7 @@
   "AV-04": {
     "id": "AV-04",
     "status": "Pass",
-    "reply": "Dạ, em xin phép giải đáp thắc mắc của anh/chị ạ! \n\nTại hệ thống khách sạn Sen Việt Luxury, sức chứa tối đa của một phòng đơn (hạng Family) là **4 người lớn** và chúng em hiện không có hạng phòng đơn nào đủ sức chứa cho 6 người ở chung trong một phòng.\n\nĐể đảm bảo không gian nghỉ ngơi thoải mái nhất cho đoàn 6 người của mình, em xin đề xuất các phương án đặt phòng sau ạ:\n1. **Phương án 1:** Đặt **1 phòng Family (4 người)** + **1 phòng Deluxe hoặc Standard (2 người)**.\n2. **Phương án 2:** Đặt **3 phòng tiêu chuẩn (mỗi phòng 2 người)**.\n\nNếu anh/chị cần hỗ trợ sắp xếp các phòng ở vị trí gần nhau (connecting rooms) hoặc có các yêu cầu đặc biệt khác cho đoàn, anh/chị vui lòng liên hệ trực tiếp qua hotline **1900 6868** để các bạn nhân viên hỗ trợ chu đáo nhất nhé ạ!\n\nBây giờ, để em tiếp tục hỗ trợ anh/chị tiến hành đặt phòng, anh/chị vui lòng cho em biết mình muốn chọn chi nhánh khách sạn nào và thời gian dự kiến nhận phòng (check-in) cũng như trả phòng (check-out) cụ thể ra sao ạ?",
+    "reply": "Dạ em chào anh/chị ạ! \n\nĐúng như anh/chị lưu ý, sức chứa tối đa của một phòng đơn (hạng Family) tại hệ thống Khách sạn Sen Việt Luxury của bên em là **4 người lớn**. \n\nĐối với đoàn **6 người**, để đảm bảo sự thoải mái và tiện nghi nhất, em xin gợi ý 2 phương án chia phòng để mình có thể chốt ngay trên chat luôn ạ:\n\n- **Phương án 1 (Khuyên dùng):** Đặt **1 phòng Family** (tối đa 4 người) + **1 phòng Deluxe** (2 người).\n- **Phương án 2:** Đặt **3 phòng Standard** hoặc **3 phòng Deluxe** (mỗi phòng 2 người).\n\nKhông biết anh/chị muốn chọn phương án nào để em hỗ trợ kiểm tra phòng trống và tiến hành đặt phòng luôn cho mình ạ? Nếu mình đã sẵn sàng, anh/chị vui lòng cho em xin thêm thông tin **chi nhánh khách sạn** mà mình muốn ghé thăm nhé!",
     "reason": "Deterministic checks PASSED",
     "score": 1.0
   },
@@ -506,9 +506,9 @@
   "PR-05": {
     "id": "PR-05",
     "status": "Pass",
-    "reply": "Dạ, mã khuyến mãi **TET2025** đã hết hạn sử dụng vào ngày 15/02/2025 nên hệ thống không thể áp dụng cho đơn hàng của quý khách ạ. \n\nQuý khách vui lòng chọn chi nhánh khách sạn trước để chúng em có thể tư vấn các phòng trống và các mã khuyến mãi đang còn hiệu lực nhé! \n\nHiện tại, Khách sạn Sen Việt Luxury có các chi nhánh sau:\n1. **Sen Việt Sài Gòn** (123 Lê Lợi, Quận 1, TP. Hồ Chí Minh)\n2. **Sen Việt Hà Nội** (45 Tràng Tiền, Hoàn Kiếm, Hà Nội)\n3. **Sen Việt Đà Nẵng** (Võ Nguyên Giáp, Ngũ Hành Sơn, Đà Nẵng)\n4. **Sen Việt Nha Trang** (Trần Phú, Lộc Thọ, Nha Trang, Khánh Hòa)\n5. **Sen Việt Đà Lạt** (Trần Hưng Đạo, Phường 10, Đà Lạt, Lâm Đồng)\n6. **Sen Việt Gò Công** (Đường Nguyễn Trãi, TX. Gò Công, Tiền Giang)\n7. **Sen Việt An Nhơn** (Đường Quang Trung, TX. An Nhơn, Bình Định)\n\nAnh/chị muốn đặt phòng tại chi nhánh nào ạ?",
+    "reply": "Dạ em rất tiếc, mã khuyến mãi `TET2025` đã hết hạn sử dụng vào ngày 15/02/2025 nên hệ thống hiện không thể áp dụng cho đơn hàng của mình ạ. \n\nDạ trước khi tiếp tục, anh/chị có muốn chọn chi nhánh khách sạn Sen Việt Luxury và ngày lưu trú để em kiểm tra phòng trống trước không ạ? Nếu anh/chị có mã giảm giá khác còn hiệu lực (ví dụ như mã `DEMO2K` để thử nghiệm), hãy cho em biết nhé ạ!",
     "reason": "Deterministic checks PASSED",
-    "score": 0.9
+    "score": 1.0
   },
   "PR-06": {
     "id": "PR-06",
