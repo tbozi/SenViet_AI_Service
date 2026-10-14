@@ -17,7 +17,7 @@ class ResponseEvaluator:
         if self._judge_model is None:
             genai.configure(api_key=settings.GEMINI_API_KEY)
             self._judge_model = genai.GenerativeModel(
-                model_name="gemini-2.0-flash",
+                model_name=settings.GEMINI_MODEL,
                 generation_config={"temperature": 0.0}
             )
         return self._judge_model
@@ -110,7 +110,7 @@ Trả về ĐÚNG định dạng JSON sau (không kèm markdown ngoài JSON):
 """
         try:
             model = self._get_judge_model()
-            resp = model.generate_content(judge_prompt)
+            resp = model.generate_content(judge_prompt, request_options={"timeout": 30})
             txt = resp.text.strip()
             # Clean json fences
             txt = re.sub(r"^```json\s*|^```\s*|```$", "", txt).strip()

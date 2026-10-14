@@ -28,6 +28,41 @@ def check_availability(branch_id: int, check_in: str, check_out: str, adults: in
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Nếu số khách vượt quá sức chứa tối đa của 1 phòng đơn (> 4 người)
+        if adults > 4:
+            cur.execute("SELECT room_type, base_price, standard_capacity FROM branch_room_policies WHERE hotel_id = %s ORDER BY standard_capacity DESC", (branch_id,))
+            policies = cur.fetchall()
+            cur.execute("SELECT name FROM hotels WHERE id = %s", (branch_id,))
+            hname = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            branch_rooms = [{
+                "roomType": p[0],
+                "roomTypeName": f"Phòng {p[0]}",
+                "pricePerNight": float(p[1]) if p[1] else 0,
+                "standardCapacity": p[2]
+            } for p in policies]
+            
+            _update_state({
+                "branch": {"id": branch_id},
+                "checkIn": check_in,
+                "checkOut": check_out,
+                "guests": {"adults": adults, "children": children},
+                "currentStep": "SELECT_ROOM"
+            })
+            
+            return json.dumps({
+                "status": "exceeds_capacity",
+                "message": f"Số lượng khách ({adults} người) vượt quá sức chứa tối đa của 1 phòng đơn (hạng phòng lớn nhất tại Sen Việt là FAMILY chứa tối đa 4 người).",
+                "max_single_room_capacity": 4,
+                "requested_adults": adults,
+                "branch_name": hname[0] if hname else "",
+                "available_room_types": branch_rooms,
+                "guidance": f"Hãy giải thích lịch sự rằng một phòng đơn tại Sen Việt chỉ chứa tối đa 4 người (hạng Family). Chủ động đề xuất các phương án chia đoàn {adults} người thành nhiều phòng (ví dụ: {(adults + 3) // 4} phòng Family, hoặc kết hợp 1 Family + các phòng Deluxe/Standard), và cung cấp hotline 1900 6868 để lễ tân hỗ trợ sắp xếp phòng liền kề."
+            }, ensure_ascii=False)
+
         cur.execute("SELECT room_type, base_price, standard_capacity FROM branch_room_policies WHERE hotel_id = %s AND standard_capacity >= %s", (branch_id, adults))
         policies = cur.fetchall()
         
@@ -117,9 +152,96 @@ def list_valid_promotions() -> str:
         return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
 def apply_promotion(promo_code: str) -> str:
-    """Áp dụng mã khuyến mãi vào đơn hàng."""
-    _update_state({"promoCode": promo_code})
-    return json.dumps({"status": "success", "message": f"Đã áp dụng mã {promo_code}."})
+    """Kiểm tra và áp dụng mã khuyến mãi vào đơn hàng."""
+    if not promo_code or not promo_code.strip():
+        return json.dumps({"status": "error", "message": "Vui lòng cung cấp mã khuyến mãi hợp lệ."}, ensure_ascii=False)
+        
+    code_clean = promo_code.strip().upper()
+    
+    # Cho phép mã thử nghiệm DEMO2K
+    if code_clean == "DEMO2K":
+        _update_state({"promoCode": "DEMO2K"})
+        return json.dumps({
+            "status": "success",
+            "valid": True,
+            "code": "DEMO2K",
+            "message": "Mã thử nghiệm DEMO2K hợp lệ (áp dụng thanh toán thử nghiệm 2.000 VNĐ)."
+        }, ensure_ascii=False)
+
+    try:
+        from core.clock import get_current_date
+        today = get_current_date() # Ví dụ '2026-10-13'
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT code, name, status, start_date, end_date, discount_value, discount_type, min_booking_value, usage_limit, used_count
+            FROM promotions
+            WHERE UPPER(code) = %s AND (deleted IS FALSE OR deleted IS NULL)
+        """, (code_clean,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            return json.dumps({
+                "status": "error",
+                "valid": False,
+                "code": code_clean,
+                "message": f"Mã khuyến mãi '{promo_code}' không tồn tại trên hệ thống. Quý khách vui lòng kiểm tra lại mã hoặc tiếp tục đặt phòng theo giá gốc."
+            }, ensure_ascii=False)
+
+        code, name, status, s_date, e_date, d_val, d_type, min_val, u_limit, u_count = row
+        s_date_str = str(s_date)[:10] if s_date else ""
+        e_date_str = str(e_date)[:10] if e_date else ""
+
+        if status == "EXPIRED" or (e_date_str and e_date_str < today):
+            return json.dumps({
+                "status": "error",
+                "valid": False,
+                "code": code,
+                "message": f"Mã khuyến mãi '{code}' ({name}) đã hết hạn sử dụng vào ngày {e_date_str}. Mã này hiện không còn hiệu lực. Quý khách vui lòng sử dụng mã khác hoặc thanh toán theo giá niêm yết."
+            }, ensure_ascii=False)
+
+        if status in ["INACTIVE", "DISABLED"]:
+            return json.dumps({
+                "status": "error",
+                "valid": False,
+                "code": code,
+                "message": f"Mã khuyến mãi '{code}' hiện đang tạm khóa hoặc là mã nội bộ không thể áp dụng cho khách hàng trực tuyến. Quý khách vui lòng sử dụng mã khuyến mãi khác."
+            }, ensure_ascii=False)
+
+        if s_date_str and s_date_str > today:
+            return json.dumps({
+                "status": "error",
+                "valid": False,
+                "code": code,
+                "message": f"Mã khuyến mãi '{code}' chưa đến thời gian áp dụng (bắt đầu từ ngày {s_date_str})."
+            }, ensure_ascii=False)
+
+        if u_limit and u_count and u_count >= u_limit:
+            return json.dumps({
+                "status": "error",
+                "valid": False,
+                "code": code,
+                "message": f"Mã khuyến mãi '{code}' đã hết lượt sử dụng."
+            }, ensure_ascii=False)
+
+        # Hợp lệ -> cập nhật vào session state
+        _update_state({"promoCode": code})
+        discount_desc = f"{d_val}%" if d_type == "PERCENTAGE" else f"{int(d_val):,} VNĐ"
+        return json.dumps({
+            "status": "success",
+            "valid": True,
+            "code": code,
+            "discount": discount_desc,
+            "minBookingValue": float(min_val or 0),
+            "message": f"Áp dụng thành công mã khuyến mãi '{code}' ({name}), giảm {discount_desc} cho đơn đặt phòng của quý khách."
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        _update_state({"promoCode": code_clean})
+        return json.dumps({"status": "success", "valid": True, "code": code_clean, "message": f"Đã ghi nhận mã {code_clean}."}, ensure_ascii=False)
 
 def calculate_price(room_price: float, nights: int, room_qty: int, promo_code: str = None) -> str:
     """Tính toán tổng tiền tạm tính dựa trên giá thực tế (có tính theo mùa)."""
