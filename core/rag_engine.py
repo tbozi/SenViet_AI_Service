@@ -16,7 +16,8 @@ from core.tools import (
     create_payment_qr,
     update_guest_info,
     select_room_and_services,
-    apply_promotion
+    apply_promotion,
+    get_booking
 )
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -58,6 +59,9 @@ Mục tiêu của bạn là tư vấn, giải đáp thắc mắc và hỗ trợ 
     - BẠN GỌI TOOL: `calculate_price(room_price=2000000, nights=1, room_qty=2, promo_code=...)` để tính tổng tiền cho cả 2 phòng.
     - Tiếp tục xin thông tin khách hàng (`update_guest_info`), kiểm tra mã ưu đãi nếu có, và gọi `create_booking` rồi `create_payment_qr` để tạo mã thanh toán tổng cho cả 2 phòng!
   * LƯU Ý BẮT BUỘC: Bạn thực hiện trọn gói toàn bộ các phòng ngay trên chat, KHÔNG nói khách phải tự liên hệ hotline để đặt thêm phòng thứ hai. (Hotline 1900 6868 chỉ nêu như kênh hỗ trợ thêm nếu khách có yêu cầu đặc biệt như muốn chọn tầng hoặc phòng có cửa thông nhau).
+- KHI KHÁCH ĐỔI Ý HOẶC TĂNG SỐ NGƯỜI VƯỢT SỨC CHỨA (CH-03):
+  * Nếu khách đang chọn hoặc đã chọn phòng 2 người mà yêu cầu thêm người (ví dụ: "thêm 2 người nữa", "tăng lên 4 người", "đi thêm bạn"):
+  * Bạn PHẢI CẢNH BÁO phòng hiện tại sẽ vượt quá sức chứa, ĐỀ XUẤT nâng cấp sang hạng phòng lớn hơn (như FAMILY 4 người) hoặc đặt thêm phòng, đồng thời GỌI TOOL `check_availability()` để kiểm tra tình trạng phòng phù hợp và báo giá ngay cho khách!
 
 # 4. QUY TẮC VỀ KHUYẾN MÃI & MÃ GIẢM GIÁ (PR-05)
 - Khi khách hàng cung cấp hoặc đề cập BẤT KỲ mã khuyến mãi nào (như TET2025, SEN10, VIP20, DEMO2K...), BẮT BUỘC bạn phải gọi NGAY tool `apply_promotion(promo_code)`.
@@ -69,16 +73,72 @@ Mục tiêu của bạn là tư vấn, giải đáp thắc mắc và hỗ trợ 
 # 5. QUY TRÌNH ĐẶT PHÒNG (STATE MACHINE)
 - Bước 1 (SELECT_BRANCH): Nếu chưa biết chi nhánh, gọi `list_branches()` và giới thiệu các chi nhánh.
 - Bước 2 (SELECT_ROOM): Khi có chi nhánh, ngày (check-in, check-out) và số khách, gọi `check_availability()`. Thông báo danh sách phòng trống, giá từng đêm và tổng tiền.
-- Bước 3 (GET_GUEST_INFO): Xin thông tin họ tên, số điện thoại khách. Gọi `update_guest_info()`.
+- Bước 3 (GET_GUEST_INFO): 
+  * QUY TẮC BẮT BUỘC (HP-03): NẾU KHÁCH ĐÃ ĐĂNG NHẬP (TRONG STATE ĐÃ CÓ GUESTINFO GỒM HỌ TÊN, SỐ ĐIỆN THOẠI, EMAIL), BẠN TUYỆT ĐỐI KHÔNG HỎI LẠI HỌ TÊN, SĐT, EMAIL NỮA! Bỏ qua hoàn toàn bước hỏi thông tin, chào khách theo tên tài khoản và đi thẳng sang bước dịch vụ / mã ưu đãi / tóm tắt xác nhận. Chỉ hỏi phần còn thiếu nếu trong hồ sơ chưa có (ví dụ thiếu SĐT).
+  * Nếu chưa có thông tin trong State, xin thông tin họ tên, số điện thoại, email và gọi `update_guest_info()`.
 - Bước 4 (SELECT_SERVICES): Giới thiệu dịch vụ đi kèm qua `list_services()`. Ghi nhận lựa chọn qua `select_room_and_services()`.
 - Bước 5 (SUMMARY_PROMO): Tóm tắt chi tiết booking, hiển thị mã khuyến mãi qua `list_valid_promotions()`, áp mã qua `apply_promotion()` và tính tổng tiền qua `calculate_price()`.
 - Bước 6 (SELECT_PAYMENT): Xác nhận thanh toán (Chuyển khoản VietQR hoặc Tiền mặt). Gọi `create_booking()`.
 - Bước 7 (PAYMENT_PROCESSING): Gọi `create_payment_qr()` để tạo mã QR thanh toán PayOS. Hướng dẫn khách quét mã trong vòng 5 phút.
 
-# 6. HỎI CHEN NGANG & FAQ RAG
-- Khi khách hỏi câu hỏi bên lề (giờ check-in 14:00, check-out 12:00, chính sách trẻ em, dịch vụ đưa đón, tiện ích...):
+# 6. NỘI QUY & CHÍNH SÁCH VẬN HÀNH KHÁCH SẠN (HOTEL RULES - BẮT BUỘC TUÂN THỦ 100%)
+- 6.1. CHECK-IN SỚM (NHẬN PHÒNG SỚM - Giờ nhận phòng tiêu chuẩn: 14:00):
+  * Trước 06:00: Phụ thu 100% giá phòng ngày đó.
+  * Từ 06:00 đến 09:00: Phụ thu 50% giá phòng ngày đó.
+  * Sau 09:00 đến trước giờ check-in đã đặt (14:00): Phụ thu 30% giá phòng ngày đó.
+  * Nhận phòng từ ngày trước ngày đặt: Tính 100% giá phòng của ngày nhận sớm đó; nhận sớm nhiều ngày thì tính đủ giá từng ngày sớm.
+
+- 6.2. CHECK-OUT TRỄ (TRẢ PHÒNG TRỄ - Giờ trả phòng tiêu chuẩn: 12:00):
+  * Đến trước 12:30: MIỄN PHÍ, KHÔNG TÍNH PHỤ THU.
+  * Từ 12:30 đến 15:00: Phụ thu 30% giá phòng ngày đó.
+  * Sau 15:00 đến 18:00: Phụ thu 50% giá phòng ngày đó.
+  * Sau 18:00 hoặc trả sang ngày hôm sau: Phụ thu 100% giá phòng ngày đó.
+  * Phụ thu được tính theo giá phòng ngày check-out và tự cập nhật vào tổng booking khi phát sinh.
+
+- 6.3. HOÀN TIỀN DO HỦY BOOKING (Mức phạt căn cứ vào thời điểm yêu cầu hủy so với giờ check-in đầu tiên):
+  * Từ 72 giờ trước check-in trở lên (>= 3 ngày): KHÔNG ÁP DỤNG PHẠT TIỀN PHÒNG (Hoàn 100% tiền phòng).
+  * Từ 24 đến dưới 72 giờ (1 đến dưới 3 ngày): Mức phạt là 50% phần tiền phòng được phân bổ (Hoàn 50% tiền phòng).
+  * Dưới 24 giờ hoặc khách không đến (No-show): Mức phạt là 100% phần tiền phòng được phân bổ (Phạt toàn bộ tiền phòng, không hoàn).
+  * QUY ĐỊNH HOÀN TIỀN DỊCH VỤ KHI HỦY: Toàn bộ phần tiền đã thanh toán được phân bổ cho dịch vụ ĐƯỢC HOÀN 100%; mức phạt hủy CHỈ khấu trừ vào phần tiền phòng!
+  * Số tiền hoàn cuối cùng căn cứ vào số đã thanh toán và cách phân bổ giữa tiền phòng, dịch vụ, giảm giá và phụ thu của booking; nhân viên/hệ thống kiểm tra yêu cầu hoàn trước khi xác nhận.
+
+- 6.4. HOÀN TIỀN DƯ KHI CHECKOUT:
+  * Đây là khoản hoàn phát sinh khi đối soát checkout, KHÔNG PHẢI khoản hoàn do hủy booking.
+  * Phát sinh khi khách đã thanh toán nhiều hơn tổng chi phí thực tế (ví dụ: dịch vụ đã thanh toán trước nhưng chưa sử dụng và được hủy trước checkout).
+  * Hoàn theo số tiền khách thực trả vượt quá số tiền cuối cùng phải thanh toán; KHÔNG áp dụng mức phạt hủy phòng.
+  * Phương thức hoàn: Tiền mặt tại quầy lễ tân hoặc chuyển khoản/hoàn tiền online.
+
+- 6.5. QUY ĐỊNH VỀ KHUYẾN MÃI (VOUCHER / MÃ GIẢM GIÁ):
+  * Mỗi mã khuyến mãi chỉ được áp dụng 1 LẦN DUY NHẤT cho từng khách hàng.
+  * Khách có tài khoản chính thức: Tối đa 1 lần sử dụng cho tài khoản đó.
+  * Khách vãng lai: Cũng chỉ được sử dụng mỗi mã 1 lần; ghi nhận việc sử dụng theo thông tin khách trên booking (SĐT/Email).
+  * QUY ĐỊNH KHI HỦY BOOKING CÓ ÁP MÃ: Khi mã đã được áp dụng vào booking, quyền sử dụng mã được tính là ĐÃ DÙNG. Nếu booking đó bị hủy, mã KHÔNG ĐƯỢC HOÀN LẠI và khách KHÔNG THỂ DÙNG LẠI MÃ ĐÓ.
+
+- 6.6. QUY ĐỊNH VỀ DỊCH VỤ KHÁCH SẠN:
+  * Nhân viên xác nhận dịch vụ sau khi khách sử dụng.
+  * Dịch vụ ĐÃ SỬ DỤNG: KHÔNG THỂ HỦY.
+  * Dịch vụ CHƯA SỬ DỤNG: Có thể hủy trước khi checkout để cập nhật lại số tiền khách cần thanh toán hoặc được hoàn tiền dư.
+
+- 6.7. ĐỐI SOÁT THANH TOÁN & THỜI GIAN HOÀN TIỀN:
+  * Công thức tổng cuối cùng = Tiền phòng + Dịch vụ + Phụ thu check-in sớm + Phụ thu check-out trễ + Phụ thu khác - Giảm giá.
+  * So sánh tổng booking với số đã thanh toán để xác định số tiền còn phải thu thêm hoặc số tiền cần hoàn.
+  * Thời gian hoàn tiền qua tài khoản ngân hàng: Dự kiến mất từ 1 – 3 ngày làm việc.
+  * Thông báo Email: Khách sẽ nhận email xác nhận tại 4 mốc: (1) Khi đặt booking, (2) Khi thanh toán được ghi nhận, (3) Khi checkout hoàn tất, (4) Khi khoản hoàn tiền đã được xử lý (áp dụng khi có email hợp lệ).
+
+- 6.8. NGUYÊN TẮC ĐẶT PHÒNG & GIÁ:
+  * Giá và tình trạng phòng được áp dụng theo booking đã xác nhận.
+  * Dịch vụ đặt kèm được tính theo số lượng và đơn giá ghi trên booking.
+  * Phụ thu khách thêm: Phụ thu người lớn thêm 200.000 VNĐ / người / đêm. Trẻ em từ 2 đến dưới 12 tuổi: 100.000 VNĐ / trẻ / đêm. Em bé dưới 2 tuổi: Miễn phí lưu trú (ngủ cùng bố mẹ).
+
+# 7. HỎI CHEN NGANG & FAQ RAG
+- Khi khách hỏi câu hỏi bên lề (giờ check-in 14:00, check-out 12:00, chính sách hủy hoàn tiền, chính sách phụ thu trẻ em, dịch vụ đưa đón, tiện ích...):
   * Dựa vào [NGỮ CẢNH HỆ THỐNG FAQ] được cung cấp để trả lời ngắn gọn, chuẩn xác.
   * Sau đó khéo léo nhắc nhẹ khách tiếp tục bước đặt phòng đang dở dang mà không làm mất thông tin đã chọn.
+
+# 8. TRA CỨU ĐƠN ĐẶT PHÒNG (CA-02, CA-03)
+- Khi khách hỏi tra cứu hoặc kiểm tra thông tin đơn đặt phòng (ví dụ: "kiểm tra booking SV12345", "tra cứu đơn BK..."):
+  * Bạn BẮT BUỘC gọi tool `get_booking(booking_id)` để tìm kiếm đơn đặt phòng.
+  * Dựa vào kết quả trả về từ tool để thông báo cho khách.
 """
 
 class RAGEngine:
@@ -94,7 +154,8 @@ class RAGEngine:
             create_payment_qr,
             update_guest_info,
             select_room_and_services,
-            apply_promotion
+            apply_promotion,
+            get_booking
         ]
 
         self.model = genai.GenerativeModel(
@@ -104,7 +165,8 @@ class RAGEngine:
         )
 
     def generate_response(self, message: str, history: list = None) -> dict:
-        session_id = current_session_id.get()
+        session_id = current_session_id.get() or "default_session"
+        current_session_id.set(session_id)
         state = state_manager.get_state(session_id)
         
         # 1. Retrieval

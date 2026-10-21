@@ -33,13 +33,15 @@ class StateManager:
     def __init__(self):
         self.sessions: Dict[str, BookingState] = {}
 
-    def get_state(self, session_id: str) -> BookingState:
-        if session_id not in self.sessions:
-            self.sessions[session_id] = BookingState(sessionId=session_id)
-        return self.sessions[session_id]
+    def get_state(self, session_id: str = None) -> BookingState:
+        sid = session_id or "default_session"
+        if sid not in self.sessions:
+            self.sessions[sid] = BookingState(sessionId=sid)
+        return self.sessions[sid]
 
     def update_state(self, session_id: str, updates: Dict[str, Any]) -> BookingState:
-        state = self.get_state(session_id)
+        sid = session_id or "default_session"
+        state = self.get_state(sid)
         for key, value in updates.items():
             if hasattr(state, key):
                 setattr(state, key, value)

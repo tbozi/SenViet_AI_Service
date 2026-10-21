@@ -3,7 +3,7 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config.settings import settings
-from routers import chat, ingest
+from routers import chat, ingest, staff_ai, admin_ai
 from core.database import fetch_hotel_knowledge
 from core.vector_store import vector_store
 
@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
         docs = fetch_hotel_knowledge()
         count = vector_store.index_documents(docs)
         print(f"[+] Đã hoàn tất nạp {count} tài liệu vào Vector Database thành công!")
+    
+    # Khởi tạo bảng lưu lịch sử chat
+    from core.chat_history import init_chat_tables
+    init_chat_tables()
     
     yield
     print("[*] Dừng dịch vụ AI...")
@@ -59,10 +63,32 @@ app.add_middleware(
 # Đăng ký các router
 app.include_router(chat.router)
 app.include_router(ingest.router)
+app.include_router(staff_ai.router)
+app.include_router(admin_ai.router)
 
 @app.post("/ai/chat", response_model=chat.ApiResponse, summary="Gửi tin nhắn chat tới AI (Root /ai/chat)")
 async def root_ai_chat(request: chat.ChatRequest):
     return await chat.chat_endpoint(request)
+
+@app.get("/ai/chat/history/{session_id}", summary="Lấy lịch sử hội thoại (Root /ai/chat/history)")
+async def root_get_chat_history(session_id: str):
+    return await chat.get_chat_history_endpoint(session_id)
+
+@app.delete("/ai/chat/history/{session_id}", summary="Xóa lịch sử hội thoại (Root /ai/chat/history)")
+async def root_delete_chat_history(session_id: str):
+    return await chat.delete_chat_history_endpoint(session_id)
+
+@app.post("/admin-ai/chat", response_model=admin_ai.AdminApiResponse, summary="Gửi tin nhắn tới Trợ lý AI Quản trị (Root /admin-ai/chat)")
+async def root_admin_ai_chat(request: admin_ai.AdminChatRequest):
+    return await admin_ai.admin_chat_endpoint(request)
+
+@app.get("/admin-ai/chat/history/{session_id}", summary="Lấy lịch sử hội thoại Quản trị (Root)")
+async def root_get_admin_chat_history(session_id: str):
+    return await admin_ai.get_admin_chat_history(session_id)
+
+@app.delete("/admin-ai/chat/history/{session_id}", summary="Xóa lịch sử hội thoại Quản trị (Root)")
+async def root_delete_admin_chat_history(session_id: str):
+    return await admin_ai.delete_admin_chat_history(session_id)
 
 @app.get("/", summary="Trang chủ Dịch vụ AI")
 async def root():

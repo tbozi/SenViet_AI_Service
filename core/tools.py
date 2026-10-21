@@ -363,6 +363,30 @@ def create_booking(payment_method: str) -> str:
         children = state.guests.get('children', 0)
         guest_name = state.guestInfo.get('name', 'Khách Ẩn Danh')
         guest_phone = state.guestInfo.get('phone', '0000000000')
+        guest_email = state.guestInfo.get('email')
+        
+        # Tự động tìm email từ PostgreSQL nếu khách chưa nhập email
+        if not guest_email and guest_phone and guest_phone != '0000000000':
+            try:
+                conn_mail = get_db_connection()
+                cur_mail = conn_mail.cursor()
+                cur_mail.execute("SELECT email FROM customers WHERE phone = %s AND email IS NOT NULL AND email != '' LIMIT 1", (guest_phone,))
+                r_mail = cur_mail.fetchone()
+                if r_mail and r_mail[0]:
+                    guest_email = r_mail[0]
+                else:
+                    cur_mail.execute("SELECT email FROM accounts WHERE phone = %s AND email IS NOT NULL AND email != '' LIMIT 1", (guest_phone,))
+                    r_acc = cur_mail.fetchone()
+                    if r_acc and r_acc[0]:
+                        guest_email = r_acc[0]
+                cur_mail.close()
+                conn_mail.close()
+            except Exception:
+                pass
+        
+        if not guest_email:
+            guest_email = f"{guest_phone}@guest.senviet.vn" if guest_phone != '0000000000' else 'contact@senviet.vn'
+
         promo_code = state.promoCode
         
         service_ids = []
@@ -381,9 +405,16 @@ def create_booking(payment_method: str) -> str:
         WHERE b.hotel_id = %s 
           AND r.room_status = 'READY'
           AND r.room_type = %s
+          AND r.room_id NOT IN (
+              SELECT bd.room_id
+              FROM booking_details bd
+              WHERE bd.status != 'CANCELLED'
+                AND bd.checkin_time < %s
+                AND bd.checkout_time > %s
+          )
         LIMIT %s
         """
-        cur.execute(query, (branch_id, room_type.upper(), room_qty))
+        cur.execute(query, (branch_id, room_type.upper(), check_out, check_in, room_qty))
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -397,6 +428,7 @@ def create_booking(payment_method: str) -> str:
         payload = {
             "customerName": guest_name,
             "customerPhone": guest_phone,
+            "customerEmail": guest_email,
             "hotelId": branch_id,
             "roomIds": room_ids,
             "checkInTime": check_in,
@@ -520,4 +552,59 @@ def create_payment_qr(booking_id: str, amount: float) -> str:
         "bookingId": booking_id,
         "orderCode": order_code
     }, ensure_ascii=False)
+
+
+def get_booking(booking_id: str) -> str:
+    """Tra cứu thông tin chi tiết của một đơn đặt phòng (booking) theo mã booking."""
+    try:
+        from core.database import get_db_connection
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        clean_id = (booking_id or "").strip()
+        
+        query = """
+        SELECT b.booking_id, b.booking_status, b.created_at,
+               c.full_name, c.phone, c.email,
+               h.name as hotel_name,
+               o.total_amount, o.paid_amount,
+               r.room_type, r.room_number,
+               bd.checkin_time, bd.checkout_time
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.customer_id
+        LEFT JOIN hotels h ON b.hotel_id = h.id
+        LEFT JOIN orders o ON b.order_id = o.order_id
+        LEFT JOIN booking_details bd ON bd.booking_id = b.booking_id
+        LEFT JOIN rooms r ON bd.room_id = r.room_id
+        WHERE b.booking_id = %s OR b.booking_id ILIKE %s
+        LIMIT 1
+        """
+        cur.execute(query, (clean_id, f"%{clean_id}%"))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not row:
+            return json.dumps({
+                "status": "not_found",
+                "message": f"Không tìm thấy đơn đặt phòng với mã {booking_id}. Quý khách vui lòng kiểm tra lại mã hoặc cung cấp số điện thoại đặt phòng để em kiểm tra giúp ạ!"
+            }, ensure_ascii=False)
+            
+        b_id, b_status, b_created, c_name, c_phone, c_email, h_name, total, paid, r_type, r_num, c_in, c_out = row
+        return json.dumps({
+            "status": "success",
+            "bookingId": b_id,
+            "hotel": h_name or "Khách sạn Sen Việt",
+            "customerName": c_name or "Quý khách",
+            "roomType": r_type or "STANDARD",
+            "roomNumber": r_num,
+            "checkIn": str(c_in) if c_in else None,
+            "checkOut": str(c_out) if c_out else None,
+            "bookingStatus": b_status,
+            "totalAmount": float(total) if total else 0.0,
+            "paidAmount": float(paid) if paid else 0.0
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+
 
